@@ -1,0 +1,14 @@
+analysis:
+  lookback_days: 180
+  swing_window: 5
+  cluster_tolerance_pct: 0.5
+  touch_tolerance_pct: 0.5
+  proximity_pct: 10.0
+  max_levels_per_ticker: 6
+  include_pivot_daily: true
+  include_pivot_weekly: true
+  timezone: America/Toronto
+
+source:
+  source_db_path: /source_data/financial_market_report.sqlite3
+  source_run_id: null

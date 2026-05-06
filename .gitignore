@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local secrets and environment
+.env
+*.env
+secrets/*
+!secrets/.gitkeep
+
+# Local runtime data
+data/*
+!data/.gitkeep
+source_data/*
+!source_data/.gitkeep
+charts/*
+!charts/.gitkeep
+logs/*
+!logs/.gitkeep
+*.sqlite
+*.sqlite3
+.venv/
