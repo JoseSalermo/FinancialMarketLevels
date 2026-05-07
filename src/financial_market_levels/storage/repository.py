@@ -113,6 +113,19 @@ def create_levels_run(
         return int(cursor.lastrowid)
 
 
+def set_levels_run_source(
+    db_path: str | Path | None,
+    *,
+    run_id: int,
+    source_run_id: int | None,
+) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE levels_runs SET source_run_id = ? WHERE id = ?",
+            (source_run_id, run_id),
+        )
+
+
 def finish_levels_run(
     db_path: str | Path | None,
     *,
