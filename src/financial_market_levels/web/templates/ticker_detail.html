@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ symbol }} (Run #{{ run.id }}){% endblock %}
+{% block content %}
+<section class="header-row">
+  <div>
+    <h1>{{ symbol }} <span class="muted">— Run #{{ run.id }}</span></h1>
+    <p class="muted">
+      {{ ticker.company_name or "" }}
+      {% if ticker.last_price %}· last close ${{ "%.2f"|format(ticker.last_price) }}{% endif %}
+      {% if ticker.last_bar_date %}· {{ ticker.last_bar_date }}{% endif %}
+    </p>
+  </div>
+  <a class="button-link" href="{{ url_for('run_detail', run_id=run.id) }}">← Back to Run</a>
+</section>
+
+{% if ticker.chart_path %}
+<section class="panel">
+  <h2>Chart</h2>
+  <img class="chart" src="{{ url_for('chart_asset', run_id=run.id, filename=symbol + '.png') }}" alt="{{ symbol }} chart">
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Support / Resistance Levels</h2>
+  {% if levels %}
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Level</th>
+          <th>Method</th>
+          <th>Pivot</th>
+          <th>Distance %</th>
+          <th>Touches</th>
+          <th>Cluster</th>
+          <th>Rank</th>
+          <th>Last Touch</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lvl in levels %}
+          <tr>
+            <td><span class="badge {% if lvl.level_type == 'support' %}status-succeeded{% else %}status-failed{% endif %}">{{ lvl.level_type }}</span></td>
+            <td>${{ "%.2f"|format(lvl.level_value) }}</td>
+            <td>{{ lvl.method }}</td>
+            <td>{{ lvl.pivot_role or "-" }}</td>
+            <td>{{ "%+.2f"|format(lvl.distance_pct) }}%</td>
+            <td>{{ lvl.touch_count }}</td>
+            <td>{{ lvl.cluster_size }}</td>
+            <td>{{ lvl.rank_in_ticker }}</td>
+            <td>{{ lvl.last_touch_date or "-" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No levels within proximity for this run.</p>
+  {% endif %}
+</section>
+{% endblock %}

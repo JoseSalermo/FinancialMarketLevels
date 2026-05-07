@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<section class="header-row">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="muted">Latest run state and recent history. Manual runs read trending tickers from the sibling DB.</p>
+  </div>
+  <form method="post" action="{{ url_for('run_now') }}">
+    <button type="submit" {% if running_run %}disabled{% endif %}>Run Now</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Latest Run</h2>
+  {% if latest_run %}
+    <dl class="stats">
+      <div><dt>Run</dt><dd><a href="{{ url_for('run_detail', run_id=latest_run.id) }}">#{{ latest_run.id }}</a></dd></div>
+      <div><dt>Status</dt><dd><span class="badge status-{{ latest_run.status }}">{{ latest_run.status }}</span></dd></div>
+      <div><dt>Started</dt><dd>{{ latest_run.started_at }}</dd></div>
+      <div><dt>Finished</dt><dd>{{ latest_run.finished_at or "-" }}</dd></div>
+      <div><dt>Source Run</dt><dd>{{ latest_run.source_run_id or "-" }}</dd></div>
+      <div><dt>Tickers</dt><dd>{{ latest_run.ticker_count }}</dd></div>
+      <div><dt>Levels</dt><dd>{{ latest_run.levels_count }}</dd></div>
+    </dl>
+    {% if latest_run.error_message %}
+      <pre class="error">{{ latest_run.error_message }}</pre>
+    {% endif %}
+  {% else %}
+    <p>No runs recorded yet. Click "Run Now" to start one.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Recent Runs</h2>
+  {% if recent_runs %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Source Run</th>
+          <th>Tickers</th>
+          <th>Levels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in recent_runs %}
+          <tr>
+            <td><a href="{{ url_for('run_detail', run_id=run.id) }}">#{{ run.id }}</a></td>
+            <td><span class="badge status-{{ run.status }}">{{ run.status }}</span></td>
+            <td>{{ run.started_at }}</td>
+            <td>{{ run.source_run_id or "-" }}</td>
+            <td>{{ run.ticker_count }}</td>
+            <td>{{ run.levels_count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No runs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
