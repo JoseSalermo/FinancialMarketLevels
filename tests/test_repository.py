@@ -272,3 +272,40 @@ def test_list_levels_for_run_returns_all_symbols_ordered(tmp_db: Path) -> None:
 def test_list_levels_for_run_empty_when_no_levels(tmp_db: Path) -> None:
     run_id = create_levels_run(tmp_db, started_at="2026-05-06T00:00:00Z", params={})
     assert list_levels_for_run(tmp_db, run_id=run_id) == []
+
+
+def test_reap_orphaned_running_runs_marks_running_as_failed(tmp_db: Path) -> None:
+    from financial_market_levels.storage.repository import reap_orphaned_running_runs
+
+    a = create_levels_run(tmp_db, started_at=utc_now_iso(), params={})
+    b = create_levels_run(tmp_db, started_at=utc_now_iso(), params={})
+    finish_levels_run(tmp_db, run_id=b, status="succeeded", finished_at=utc_now_iso())
+
+    reaped = reap_orphaned_running_runs(tmp_db)
+    assert reaped == 1
+
+    row = get_levels_run(tmp_db, a)
+    assert row["status"] == "failed"
+    assert row["finished_at"] is not None
+    assert "restarted" in (row["error_message"] or "").lower()
+
+    succeeded = get_levels_run(tmp_db, b)
+    assert succeeded["status"] == "succeeded"
+
+
+def test_reap_orphaned_running_runs_no_running_returns_zero(tmp_db: Path) -> None:
+    from financial_market_levels.storage.repository import reap_orphaned_running_runs
+
+    a = create_levels_run(tmp_db, started_at=utc_now_iso(), params={})
+    finish_levels_run(tmp_db, run_id=a, status="succeeded", finished_at=utc_now_iso())
+    assert reap_orphaned_running_runs(tmp_db) == 0
+
+
+def test_reap_orphaned_running_runs_multiple(tmp_db: Path) -> None:
+    from financial_market_levels.storage.repository import reap_orphaned_running_runs
+
+    create_levels_run(tmp_db, started_at=utc_now_iso(), params={})
+    create_levels_run(tmp_db, started_at=utc_now_iso(), params={})
+    create_levels_run(tmp_db, started_at=utc_now_iso(), params={})
+    assert reap_orphaned_running_runs(tmp_db) == 3
+    assert reap_orphaned_running_runs(tmp_db) == 0  # idempotent

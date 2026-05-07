@@ -39,6 +39,7 @@ from financial_market_levels.storage.repository import (
     list_levels_for_ticker,
     list_levels_runs,
     list_run_tickers,
+    reap_orphaned_running_runs,
     update_settings,
 )
 from financial_market_levels.vault import load_vault_config
@@ -126,6 +127,12 @@ def create_app(*, db_path: str | Path | None = None) -> Flask:
     app.config["DB_PATH"] = str(db_path or DEFAULT_DB_PATH)
     app.config["CHARTS_ROOT"] = _charts_root()
     init_db(app.config["DB_PATH"])
+
+    reaped = reap_orphaned_running_runs(app.config["DB_PATH"])
+    if reaped:
+        app.logger.warning(
+            "Reaped %d orphaned 'running' levels_runs row(s) on startup.", reaped
+        )
 
     @app.get("/healthz")
     def healthz():
@@ -355,5 +362,15 @@ def run_dev_server(
     db_path: str | Path | None = None,
     debug: bool = False,
 ) -> None:
+    """Boot the web app. Uses Flask's dev server when debug=True; otherwise
+    serves via waitress so production deployments don't trip the
+    'do not use it in a production deployment' warning."""
     app = create_app(db_path=db_path)
-    app.run(host=host, port=port, debug=debug, use_reloader=False)
+    if debug:
+        app.run(host=host, port=port, debug=True, use_reloader=False)
+        return
+
+    from waitress import serve
+
+    app.logger.info("Serving on http://%s:%d via waitress", host, port)
+    serve(app, host=host, port=port)

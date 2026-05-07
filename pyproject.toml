@@ -19,6 +19,7 @@ dependencies = [
     "tzdata>=2024.2",
     "yfinance>=0.2.66",
     "hvac>=2.3",
+    "waitress>=3.0",
 ]
 
 [project.scripts]
