@@ -6,6 +6,9 @@
     <h1>Run #{{ run.id }}</h1>
     <p class="muted">{{ run.started_at }} · <span class="badge status-{{ run.status }}">{{ run.status }}</span></p>
   </div>
+  {% if run.levels_count and run.levels_count > 0 %}
+    <a class="button-link" href="{{ url_for('run_levels_csv', run_id=run.id) }}">Download CSV</a>
+  {% endif %}
 </section>
 
 <section class="panel">

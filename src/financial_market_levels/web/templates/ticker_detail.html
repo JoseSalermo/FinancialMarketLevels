@@ -21,7 +21,18 @@
 {% endif %}
 
 <section class="panel">
-  <h2>Support / Resistance Levels</h2>
+  <div class="header-row">
+    <h2>Support / Resistance Levels</h2>
+    <a class="button-link" href="{{ url_for('ticker_levels_csv', run_id=run.id, symbol=symbol) }}">Download CSV</a>
+  </div>
+  <nav class="filter-chips">
+    <a class="chip {% if type_filter == 'all' %}chip-active{% endif %}"
+       href="{{ url_for('ticker_detail', run_id=run.id, symbol=symbol) }}">All ({{ counts.all }})</a>
+    <a class="chip chip-support {% if type_filter == 'support' %}chip-active{% endif %}"
+       href="{{ url_for('ticker_detail', run_id=run.id, symbol=symbol, type='support') }}">Support ({{ counts.support }})</a>
+    <a class="chip chip-resistance {% if type_filter == 'resistance' %}chip-active{% endif %}"
+       href="{{ url_for('ticker_detail', run_id=run.id, symbol=symbol, type='resistance') }}">Resistance ({{ counts.resistance }})</a>
+  </nav>
   {% if levels %}
     <table>
       <thead>
@@ -54,7 +65,7 @@
       </tbody>
     </table>
   {% else %}
-    <p>No levels within proximity for this run.</p>
+    <p>No {{ type_filter if type_filter != 'all' else '' }} levels for this view.</p>
   {% endif %}
 </section>
 {% endblock %}
