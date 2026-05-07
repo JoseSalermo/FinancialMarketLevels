@@ -10,5 +10,5 @@ analysis:
   timezone: America/Toronto
 
 source:
-  source_db_path: /source_data/financial_market_report.sqlite3
+  source_db_path: /app/source_data/financial_market_report.sqlite3
   source_run_id: null

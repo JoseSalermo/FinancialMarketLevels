@@ -24,7 +24,7 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "defaults.yaml"
 
 @dataclass(frozen=True)
 class SourceSettings:
-    source_db_path: str = "/source_data/financial_market_report.sqlite3"
+    source_db_path: str = "/app/source_data/financial_market_report.sqlite3"
     source_run_id: int | None = None
 
 
