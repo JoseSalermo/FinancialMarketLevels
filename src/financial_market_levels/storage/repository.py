@@ -126,6 +126,26 @@ def set_levels_run_source(
         )
 
 
+def reap_orphaned_running_runs(db_path: str | Path | None) -> int:
+    """Mark any rows still status='running' as 'failed'. Used at app startup
+    so a container restart mid-run doesn't leave stale rows that block the
+    Run Now button forever. Returns the number of rows updated."""
+    init_db(db_path)
+    finished_at = utc_now_iso()
+    with connect(db_path) as conn:
+        cursor = conn.execute(
+            """
+            UPDATE levels_runs
+            SET status = 'failed',
+                finished_at = ?,
+                error_message = ?
+            WHERE status = 'running'
+            """,
+            (finished_at, "Container or process restarted while run was in progress."),
+        )
+        return int(cursor.rowcount or 0)
+
+
 def finish_levels_run(
     db_path: str | Path | None,
     *,

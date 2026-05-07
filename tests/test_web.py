@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -432,3 +432,49 @@ def test_ticker_levels_csv_404_for_unknown_symbol(app) -> None:
     run_id = _seed_run(db)
     response = app.test_client().get(f"/runs/{run_id}/ZZZ/levels.csv")
     assert response.status_code == 404
+
+
+def test_create_app_reaps_orphaned_running_runs(tmp_path: Path) -> None:
+    from financial_market_levels.storage.db import init_db
+    from financial_market_levels.storage.repository import (
+        create_levels_run as _crl,
+        get_levels_run as _grl,
+    )
+    from financial_market_levels.web.app import create_app as _create_app
+
+    db_path = tmp_path / "fml.sqlite3"
+    init_db(db_path)
+    orphan_id = _crl(db_path, started_at="2026-05-07T00:00:00Z", params={})
+
+    _create_app(db_path=db_path)
+
+    row = _grl(db_path, orphan_id)
+    assert row["status"] == "failed"
+    assert "restarted" in (row["error_message"] or "").lower()
+
+
+def test_run_dev_server_uses_waitress_when_not_debug() -> None:
+    from financial_market_levels.web import app as app_mod
+
+    with patch.object(app_mod, "create_app") as mock_create, \
+         patch("waitress.serve") as mock_waitress:
+        mock_create.return_value.run = MagicMock()
+        app_mod.run_dev_server(host="0.0.0.0", port=8083, debug=False)
+
+    assert mock_waitress.called
+    call = mock_waitress.call_args
+    assert call.kwargs["host"] == "0.0.0.0"
+    assert call.kwargs["port"] == 8083
+
+
+def test_run_dev_server_uses_flask_when_debug() -> None:
+    from financial_market_levels.web import app as app_mod
+
+    fake_app = MagicMock()
+    with patch.object(app_mod, "create_app", return_value=fake_app), \
+         patch("waitress.serve") as mock_waitress:
+        app_mod.run_dev_server(host="127.0.0.1", port=8083, debug=True)
+
+    assert fake_app.run.called
+    assert fake_app.run.call_args.kwargs["debug"] is True
+    assert not mock_waitress.called
