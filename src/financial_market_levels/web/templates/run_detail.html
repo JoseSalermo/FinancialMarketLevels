@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Run #{{ run.id }}{% endblock %}
+{% block content %}
+<section class="header-row">
+  <div>
+    <h1>Run #{{ run.id }}</h1>
+    <p class="muted">{{ run.started_at }} · <span class="badge status-{{ run.status }}">{{ run.status }}</span></p>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Run Details</h2>
+  <dl class="stats">
+    <div><dt>Status</dt><dd><span class="badge status-{{ run.status }}">{{ run.status }}</span></dd></div>
+    <div><dt>Started</dt><dd>{{ run.started_at }}</dd></div>
+    <div><dt>Finished</dt><dd>{{ run.finished_at or "-" }}</dd></div>
+    <div><dt>Source Run</dt><dd>{{ run.source_run_id or "-" }}</dd></div>
+    <div><dt>Source DB</dt><dd class="path">{{ run.source_db_path or "-" }}</dd></div>
+    <div><dt>Tickers</dt><dd>{{ run.ticker_count }}</dd></div>
+    <div><dt>Levels</dt><dd>{{ run.levels_count }}</dd></div>
+  </dl>
+  {% if run.error_message %}
+    <pre class="error">{{ run.error_message }}</pre>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Tickers</h2>
+  {% if tickers %}
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Last Price</th>
+          <th>Last Bar</th>
+          <th>Bars</th>
+          <th>Chart</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ticker in tickers %}
+          <tr>
+            <td><a href="{{ url_for('ticker_detail', run_id=run.id, symbol=ticker.symbol) }}">{{ ticker.symbol }}</a></td>
+            <td>{{ ticker.company_name or "-" }}</td>
+            <td><span class="badge status-{{ 'succeeded' if ticker.status == 'ok' else ('failed' if ticker.status == 'error' else 'running') }}">{{ ticker.status }}</span></td>
+            <td>{% if ticker.last_price %}{{ "%.2f"|format(ticker.last_price) }}{% else %}-{% endif %}</td>
+            <td>{{ ticker.last_bar_date or "-" }}</td>
+            <td>{{ ticker.bar_count }}</td>
+            <td>
+              {% if ticker.status == "ok" %}
+                <a href="{{ url_for('ticker_detail', run_id=run.id, symbol=ticker.symbol) }}">view</a>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+          {% if ticker.error_message %}
+          <tr><td colspan="7"><pre class="error">{{ ticker.error_message }}</pre></td></tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No ticker rows recorded for this run yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
