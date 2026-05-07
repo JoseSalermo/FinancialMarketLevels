@@ -11,6 +11,7 @@ from financial_market_levels.source_db.reader import (
     fetch_trending_tickers,
     get_latest_succeeded_run_id,
     list_ticker_candidates,
+    source_db_status,
 )
 
 
@@ -168,3 +169,36 @@ def test_fetch_trending_tickers_returns_plain_dicts(sibling_db: Path) -> None:
     assert tickers[0]["symbol"] == "AAPL"
     assert tickers[0]["company_name"] == "AAPL Corp"
     assert "price" in tickers[0]
+
+
+def test_source_db_status_reachable_with_succeeded_run(sibling_db: Path) -> None:
+    with sqlite3.connect(sibling_db) as conn:
+        run_id = _seed_run(conn, status="succeeded", started_at="2026-04-01T00:00:00Z")
+        _seed_candidate(conn, run_id=run_id, symbol="AAPL", source="gainers")
+        _seed_candidate(conn, run_id=run_id, symbol="MSFT", source="losers")
+
+    status = source_db_status(sibling_db)
+    assert status["path"] == str(sibling_db)
+    assert status["reachable"] is True
+    assert status["latest_run_id"] == run_id
+    assert status["ticker_count"] == 2
+    assert status["error"] is None
+
+
+def test_source_db_status_no_succeeded_runs(sibling_db: Path) -> None:
+    with sqlite3.connect(sibling_db) as conn:
+        _seed_run(conn, status="failed", started_at="2026-04-01T00:00:00Z")
+
+    status = source_db_status(sibling_db)
+    assert status["reachable"] is True
+    assert status["latest_run_id"] is None
+    assert status["ticker_count"] is None
+    assert status["error"] is None
+
+
+def test_source_db_status_missing_path_returns_error(tmp_path: Path) -> None:
+    status = source_db_status(tmp_path / "nope.sqlite3")
+    assert status["reachable"] is False
+    assert status["latest_run_id"] is None
+    assert status["error"] is not None
+    assert "not found" in status["error"].lower()

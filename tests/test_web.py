@@ -277,3 +277,158 @@ def test_secrets_page_renders(app) -> None:
     response = app.test_client().get("/secrets")
     assert response.status_code == 200
     assert b"Vault Configured" in response.data
+
+
+def test_dashboard_shows_source_db_panel_unreachable(app) -> None:
+    # Default source path will not exist in the test environment
+    response = app.test_client().get("/")
+    assert response.status_code == 200
+    assert b"Source Database" in response.data
+    # Either reachable badge is present (if path happens to exist locally) or unreachable+error.
+    assert b"Reachable" in response.data
+
+
+def test_dashboard_source_panel_reachable(app, tmp_path: Path) -> None:
+    # Build a real sibling-shaped DB so the panel reports reachable.
+    src = tmp_path / "fmr.sqlite3"
+    import sqlite3 as _s
+    schema = """
+        CREATE TABLE report_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL,
+            finished_at TEXT, status TEXT NOT NULL, params_json TEXT NOT NULL, error_message TEXT,
+            ticker_count INTEGER NOT NULL DEFAULT 0, email_sent INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE ticker_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER NOT NULL,
+            symbol TEXT NOT NULL, source TEXT, price REAL, change_value REAL, changes_percentage REAL,
+            volume REAL, company_name TEXT, row_json TEXT NOT NULL);
+    """
+    conn = _s.connect(src)
+    conn.executescript(schema)
+    cur = conn.execute(
+        "INSERT INTO report_runs (started_at, status, params_json) VALUES ('x', 'succeeded', '{}')"
+    )
+    rid = cur.lastrowid
+    conn.execute(
+        "INSERT INTO ticker_candidates (run_id, symbol, row_json) VALUES (?, 'AAPL', '{}')",
+        (rid,),
+    )
+    conn.commit()
+    conn.close()
+
+    # Point the app's stored settings at this DB
+    from financial_market_levels.storage.repository import update_settings as _us
+    _us(app.config["DB_PATH"], {"source.source_db_path": str(src)})
+
+    response = app.test_client().get("/")
+    body = response.data.decode()
+    assert response.status_code == 200
+    assert "Source Database" in body
+    assert ">yes<" in body  # reachable badge
+    # Latest FMR run id is shown
+    assert f">{rid}<" in body
+
+
+def test_ticker_detail_filter_chips_render(app) -> None:
+    db = Path(app.config["DB_PATH"])
+    run_id = _seed_run(db)
+    record_run_ticker(
+        db, run_id=run_id, symbol="AAA", last_price=100.0, last_bar_date="2026-05-05",
+        bar_count=120, chart_path="/tmp/AAA.png", status="ok",
+    )
+    levels = pd.DataFrame([
+        {"level_type": "support", "level_value": 95.0, "method": "swing", "pivot_role": None,
+         "strength_score": 4, "touch_count": 4, "cluster_size": 3,
+         "distance_pct": -5.0, "distance_abs": 5.0, "rank_in_ticker": 1, "last_touch_date": None},
+        {"level_type": "resistance", "level_value": 105.0, "method": "swing", "pivot_role": None,
+         "strength_score": 2, "touch_count": 2, "cluster_size": 1,
+         "distance_pct": 5.0, "distance_abs": 5.0, "rank_in_ticker": 1, "last_touch_date": None},
+    ])
+    replace_levels(db, run_id=run_id, symbol="AAA", rows=levels)
+
+    response = app.test_client().get(f"/runs/{run_id}/AAA")
+    body = response.data.decode()
+    assert "All (2)" in body
+    assert "Support (1)" in body
+    assert "Resistance (1)" in body
+    assert "95.00" in body and "105.00" in body
+
+
+def test_ticker_detail_filter_support_only(app) -> None:
+    db = Path(app.config["DB_PATH"])
+    run_id = _seed_run(db)
+    record_run_ticker(
+        db, run_id=run_id, symbol="AAA", last_price=100.0, status="ok",
+    )
+    levels = pd.DataFrame([
+        {"level_type": "support", "level_value": 95.0, "method": "swing", "pivot_role": None,
+         "strength_score": 4, "touch_count": 4, "cluster_size": 3,
+         "distance_pct": -5.0, "distance_abs": 5.0, "rank_in_ticker": 1, "last_touch_date": None},
+        {"level_type": "resistance", "level_value": 105.0, "method": "swing", "pivot_role": None,
+         "strength_score": 2, "touch_count": 2, "cluster_size": 1,
+         "distance_pct": 5.0, "distance_abs": 5.0, "rank_in_ticker": 1, "last_touch_date": None},
+    ])
+    replace_levels(db, run_id=run_id, symbol="AAA", rows=levels)
+
+    response = app.test_client().get(f"/runs/{run_id}/AAA?type=support")
+    body = response.data.decode()
+    assert "95.00" in body
+    assert "105.00" not in body
+
+
+def test_ticker_detail_filter_invalid_type_falls_back_to_all(app) -> None:
+    db = Path(app.config["DB_PATH"])
+    run_id = _seed_run(db)
+    record_run_ticker(db, run_id=run_id, symbol="AAA", last_price=100.0, status="ok")
+    response = app.test_client().get(f"/runs/{run_id}/AAA?type=garbage")
+    assert response.status_code == 200
+
+
+def test_run_levels_csv_downloads(app) -> None:
+    db = Path(app.config["DB_PATH"])
+    run_id = _seed_run(db)
+    record_run_ticker(db, run_id=run_id, symbol="AAA", last_price=100.0, status="ok")
+    levels = pd.DataFrame([
+        {"level_type": "support", "level_value": 95.0, "method": "swing", "pivot_role": None,
+         "strength_score": 4, "touch_count": 4, "cluster_size": 3,
+         "distance_pct": -5.0, "distance_abs": 5.0, "rank_in_ticker": 1, "last_touch_date": None},
+    ])
+    replace_levels(db, run_id=run_id, symbol="AAA", rows=levels)
+
+    response = app.test_client().get(f"/runs/{run_id}/levels.csv")
+    assert response.status_code == 200
+    assert response.mimetype == "text/csv"
+    assert f'filename="run_{run_id}_levels.csv"' in response.headers["Content-Disposition"]
+    body = response.data.decode()
+    header, *rows = [line for line in body.splitlines() if line]
+    assert header.split(",")[0] == "symbol"
+    assert any(line.startswith("AAA,support,95.0,") for line in rows)
+
+
+def test_ticker_levels_csv_downloads(app) -> None:
+    db = Path(app.config["DB_PATH"])
+    run_id = _seed_run(db)
+    record_run_ticker(db, run_id=run_id, symbol="AAA", last_price=100.0, status="ok")
+    levels = pd.DataFrame([
+        {"level_type": "support", "level_value": 95.0, "method": "swing", "pivot_role": None,
+         "strength_score": 4, "touch_count": 4, "cluster_size": 3,
+         "distance_pct": -5.0, "distance_abs": 5.0, "rank_in_ticker": 1, "last_touch_date": None},
+    ])
+    replace_levels(db, run_id=run_id, symbol="AAA", rows=levels)
+
+    response = app.test_client().get(f"/runs/{run_id}/AAA/levels.csv")
+    assert response.status_code == 200
+    body = response.data.decode()
+    header, *rows = [line for line in body.splitlines() if line]
+    # Per-ticker CSV does not include the symbol column
+    assert header.split(",")[0] == "level_type"
+    assert any(line.startswith("support,95.0,") for line in rows)
+
+
+def test_run_levels_csv_404_for_unknown_run(app) -> None:
+    response = app.test_client().get("/runs/9999/levels.csv")
+    assert response.status_code == 404
+
+
+def test_ticker_levels_csv_404_for_unknown_symbol(app) -> None:
+    db = Path(app.config["DB_PATH"])
+    run_id = _seed_run(db)
+    response = app.test_client().get(f"/runs/{run_id}/ZZZ/levels.csv")
+    assert response.status_code == 404

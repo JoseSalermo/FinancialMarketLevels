@@ -221,6 +221,36 @@ dd { margin: 0.25rem 0 0; font-weight: 650; }
   border-radius: 4px;
 }
 
+.filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f1f5f9;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chip:hover { text-decoration: none; background: #e6ecf2; }
+
+.chip-active {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: white;
+}
+
+.chip-support.chip-active   { background: var(--success); border-color: #154e26; }
+.chip-resistance.chip-active { background: var(--danger);  border-color: #7f1d1d; }
+
 @media (max-width: 720px) {
   .topbar, .header-row, .actions {
     flex-direction: column;

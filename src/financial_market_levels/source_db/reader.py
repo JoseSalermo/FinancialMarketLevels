@@ -58,6 +58,34 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {key: row[key] for key in row.keys()}
 
 
+def source_db_status(source_db_path: str | Path) -> dict[str, Any]:
+    """Quick health probe for the sibling DB. Returns a dict suitable for
+    rendering in the dashboard. Never raises."""
+    out: dict[str, Any] = {
+        "path": str(source_db_path),
+        "reachable": False,
+        "latest_run_id": None,
+        "ticker_count": None,
+        "error": None,
+    }
+    try:
+        with connect_readonly(source_db_path) as conn:
+            out["reachable"] = True
+            run_id = get_latest_succeeded_run_id(conn)
+            out["latest_run_id"] = run_id
+            if run_id is not None:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM ticker_candidates WHERE run_id = ?",
+                    (run_id,),
+                ).fetchone()
+                out["ticker_count"] = int(row[0]) if row is not None else 0
+    except SourceDBError as exc:
+        out["error"] = str(exc)
+    except Exception as exc:
+        out["error"] = f"{exc.__class__.__name__}: {exc}"
+    return out
+
+
 def fetch_trending_tickers(
     source_db_path: str | Path,
     *,

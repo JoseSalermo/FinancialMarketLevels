@@ -12,6 +12,27 @@
 </section>
 
 <section class="panel">
+  <h2>Source Database <span class="muted">(FinancialMarketReport)</span></h2>
+  <dl class="stats">
+    <div><dt>Path</dt><dd class="path">{{ source_status.path }}</dd></div>
+    <div><dt>Reachable</dt>
+      <dd>
+        {% if source_status.reachable %}
+          <span class="badge status-succeeded">yes</span>
+        {% else %}
+          <span class="badge status-failed">no</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div><dt>Latest FMR Run</dt><dd>{{ source_status.latest_run_id or "-" }}</dd></div>
+    <div><dt>Tickers in Run</dt><dd>{{ source_status.ticker_count if source_status.ticker_count is not none else "-" }}</dd></div>
+  </dl>
+  {% if source_status.error %}
+    <pre class="error">{{ source_status.error }}</pre>
+  {% endif %}
+</section>
+
+<section class="panel">
   <h2>Latest Run</h2>
   {% if latest_run %}
     <dl class="stats">

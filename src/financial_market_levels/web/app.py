@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import threading
 from pathlib import Path
@@ -7,6 +9,7 @@ from typing import Any
 
 from flask import (
     Flask,
+    Response,
     abort,
     flash,
     redirect,
@@ -19,10 +22,12 @@ from flask import (
 from financial_market_levels.config import (
     DEFAULT_CONFIG_PATH,
     PROJECT_ROOT,
+    apply_settings_overrides,
     load_config,
 )
 from financial_market_levels.runner import run_levels
 from financial_market_levels.secrets import clear_secret_cache, secret_status, vault_error
+from financial_market_levels.source_db.reader import source_db_status
 from financial_market_levels.storage.db import DEFAULT_DB_PATH, init_db
 from financial_market_levels.storage.repository import (
     delete_completed_levels_runs,
@@ -30,6 +35,7 @@ from financial_market_levels.storage.repository import (
     get_levels_run,
     get_running_levels_run,
     get_settings,
+    list_levels_for_run,
     list_levels_for_ticker,
     list_levels_runs,
     list_run_tickers,
@@ -87,6 +93,33 @@ def _charts_root() -> Path:
     return PROJECT_ROOT / "charts"
 
 
+_LEVEL_CSV_COLUMNS = [
+    "level_type",
+    "level_value",
+    "method",
+    "pivot_role",
+    "strength_score",
+    "touch_count",
+    "cluster_size",
+    "distance_pct",
+    "distance_abs",
+    "rank_in_ticker",
+    "last_touch_date",
+]
+
+
+def _csv_response(rows: list, *, filename: str, include_symbol: bool) -> Response:
+    columns = (["symbol"] if include_symbol else []) + _LEVEL_CSV_COLUMNS
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(columns)
+    for row in rows:
+        writer.writerow([row[c] for c in columns])
+    response = Response(buf.getvalue(), mimetype="text/csv")
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
 def create_app(*, db_path: str | Path | None = None) -> Flask:
     app = Flask(__name__)
     app.secret_key = "local-dev-change-me"
@@ -104,11 +137,19 @@ def create_app(*, db_path: str | Path | None = None) -> Flask:
         latest_run = latest_runs[0] if latest_runs else None
         running_run = get_running_levels_run(app.config["DB_PATH"])
         recent_runs = list_levels_runs(app.config["DB_PATH"], limit=5)
+
+        config = apply_settings_overrides(
+            load_config(DEFAULT_CONFIG_PATH),
+            get_settings(app.config["DB_PATH"]),
+        )
+        source_status = source_db_status(config.source.source_db_path)
+
         return render_template(
             "dashboard.html",
             latest_run=latest_run,
             recent_runs=recent_runs,
             running_run=running_run,
+            source_status=source_status,
         )
 
     @app.get("/runs")
@@ -179,15 +220,59 @@ def create_app(*, db_path: str | Path | None = None) -> Flask:
         ticker = tickers.get(symbol_norm)
         if ticker is None:
             abort(404)
-        levels = list_levels_for_ticker(
+
+        type_filter = (request.args.get("type") or "all").strip().lower()
+        if type_filter not in {"all", "support", "resistance"}:
+            type_filter = "all"
+
+        all_levels = list_levels_for_ticker(
             app.config["DB_PATH"], run_id=run_id, symbol=symbol_norm
         )
+        if type_filter == "all":
+            levels = all_levels
+        else:
+            levels = [r for r in all_levels if r["level_type"] == type_filter]
+
+        counts = {
+            "all": len(all_levels),
+            "support": sum(1 for r in all_levels if r["level_type"] == "support"),
+            "resistance": sum(1 for r in all_levels if r["level_type"] == "resistance"),
+        }
+
         return render_template(
             "ticker_detail.html",
             run=run,
             ticker=ticker,
             levels=levels,
             symbol=symbol_norm,
+            type_filter=type_filter,
+            counts=counts,
+        )
+
+    @app.get("/runs/<int:run_id>/levels.csv")
+    def run_levels_csv(run_id: int):
+        run = get_levels_run(app.config["DB_PATH"], run_id)
+        if run is None:
+            abort(404)
+        rows = list_levels_for_run(app.config["DB_PATH"], run_id=run_id)
+        return _csv_response(rows, filename=f"run_{run_id}_levels.csv", include_symbol=True)
+
+    @app.get("/runs/<int:run_id>/<symbol>/levels.csv")
+    def ticker_levels_csv(run_id: int, symbol: str):
+        run = get_levels_run(app.config["DB_PATH"], run_id)
+        if run is None:
+            abort(404)
+        symbol_norm = symbol.strip().upper()
+        tickers = {t["symbol"]: t for t in list_run_tickers(app.config["DB_PATH"], run_id=run_id)}
+        if symbol_norm not in tickers:
+            abort(404)
+        rows = list_levels_for_ticker(
+            app.config["DB_PATH"], run_id=run_id, symbol=symbol_norm
+        )
+        return _csv_response(
+            rows,
+            filename=f"run_{run_id}_{symbol_norm}_levels.csv",
+            include_symbol=False,
         )
 
     @app.get("/charts/<int:run_id>/<filename>")

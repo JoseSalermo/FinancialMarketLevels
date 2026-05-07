@@ -16,6 +16,7 @@ from financial_market_levels.storage.repository import (
     get_levels_run,
     get_running_levels_run,
     get_settings,
+    list_levels_for_run,
     list_levels_for_ticker,
     list_levels_runs,
     list_run_tickers,
@@ -254,3 +255,20 @@ def test_init_db_creates_expected_tables(tmp_db: Path) -> None:
         "levels_run_tickers",
         "support_resistance_levels",
     }.issubset(names)
+
+
+def test_list_levels_for_run_returns_all_symbols_ordered(tmp_db: Path) -> None:
+    run_id = create_levels_run(tmp_db, started_at="2026-05-06T00:00:00Z", params={})
+    replace_levels(tmp_db, run_id=run_id, symbol="BBB", rows=_sample_levels())
+    replace_levels(tmp_db, run_id=run_id, symbol="AAA", rows=_sample_levels())
+
+    rows = list_levels_for_run(tmp_db, run_id=run_id)
+    assert [r["symbol"] for r in rows[:2]] == ["AAA", "AAA"]
+    # All AAA rows precede all BBB rows due to ORDER BY symbol
+    symbols = [r["symbol"] for r in rows]
+    assert symbols == sorted(symbols)
+
+
+def test_list_levels_for_run_empty_when_no_levels(tmp_db: Path) -> None:
+    run_id = create_levels_run(tmp_db, started_at="2026-05-06T00:00:00Z", params={})
+    assert list_levels_for_run(tmp_db, run_id=run_id) == []

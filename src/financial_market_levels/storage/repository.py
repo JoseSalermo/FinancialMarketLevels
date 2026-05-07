@@ -363,6 +363,37 @@ def list_levels_for_ticker(
         )
 
 
+def list_levels_for_run(
+    db_path: str | Path | None,
+    *,
+    run_id: int,
+) -> list[sqlite3.Row]:
+    init_db(db_path)
+    with connect(db_path) as conn:
+        return list(
+            conn.execute(
+                """
+                SELECT symbol,
+                       level_type,
+                       level_value,
+                       method,
+                       pivot_role,
+                       strength_score,
+                       touch_count,
+                       cluster_size,
+                       distance_pct,
+                       distance_abs,
+                       rank_in_ticker,
+                       last_touch_date
+                FROM support_resistance_levels
+                WHERE run_id = ?
+                ORDER BY symbol, level_type, rank_in_ticker
+                """,
+                (run_id,),
+            )
+        )
+
+
 def delete_levels_run(db_path: str | Path | None, *, run_id: int) -> bool:
     init_db(db_path)
     with connect(db_path) as conn:
